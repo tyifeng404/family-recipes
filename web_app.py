@@ -362,9 +362,9 @@ with tab_record:
                 )
                 has_photos = bool(camera_photo) or bool(uploaded)
 
-                # 食材消耗检查：有照片时显示
+                # 食材消耗检查
                 matching_ings: list[str] = []
-                if recipe_ings and ingredients_data and has_photos:
+                if recipe_ings and ingredients_data:
                     avail_names = {ing["name"] for ing in ingredients_data}
                     matching_ings = [n for n in recipe_ings if n in avail_names]
 
@@ -420,9 +420,9 @@ with tab_record:
                     storage.save_records(records)
                     storage.records = records
 
-                    # 处理食材消耗（仅在有照片时检查）
+                    # 处理食材消耗
                     used_up = []
-                    if photo_paths and matching_ings:
+                    if matching_ings:
                         used_up = [
                             name
                             for name in matching_ings
@@ -722,3 +722,19 @@ with tab_ingredients:
                         f"{tags_matched} {tags_missing}",
                         unsafe_allow_html=True,
                     )
+                    with st.popover("🍳 开始做菜"):
+                        st.markdown(
+                            f"「{r_name}」还缺少食材：**{'、'.join(missing)}**\n\n"
+                            f"仍然要开始做菜记录吗？"
+                        )
+                        if st.button(
+                            "确认开始",
+                            key=f"confirm_cook_partial_{r_name}",
+                            type="primary",
+                        ):
+                            st.session_state.start_cooking_recipe = r_name
+                            st.session_state.save_msg = (
+                                f"已为您预选「{r_name}」，"
+                                f"请点击「📝 做菜记录」标签页开始记录！"
+                            )
+                            st.rerun()
