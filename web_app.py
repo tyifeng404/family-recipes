@@ -11,6 +11,7 @@ from web.sidebar import render_sidebar
 from web.tab_recipe import render_recipe_tab
 from web.tab_record import render_record_tab
 from web.tab_ingredients import render_ingredients_tab
+from web.daily_recommend import render_daily_recommendations
 
 # ───────── 页面配置 ─────────
 
@@ -57,6 +58,7 @@ _defaults = {
     "form_ingredients": "",
     "save_msg": "",
     "editing_record_idx": -1,
+    "creating_new_record": False,
 }
 for _k, _v in _defaults.items():
     if _k not in st.session_state:
@@ -78,6 +80,10 @@ if st.session_state.save_msg:
 # ───────── 侧边栏 ─────────
 
 render_sidebar(recipes, ingredients_data, records)
+
+# ───────── 每日推荐菜谱 ─────────
+
+render_daily_recommendations(recipes, ingredients_data)
 
 # ═══════════════════════════════════════════
 #  三个主 Tab

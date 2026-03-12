@@ -1,176 +1,163 @@
-# 家庭食谱管理系统
+# 家庭食谱（CLI + Web）
 
-一个基于终端交互的家庭食谱管理工具，支持菜谱的增删改查、做菜实践记录（含逐步备注）以及照片保存功能。
+一个家庭菜谱管理项目，支持两种使用方式：
 
-## 功能列表
+- 命令行版：快速维护菜谱与做菜记录
+- Web 版（Streamlit）：图形化管理菜谱、食材、照片与推荐
 
-| 功能 | 说明 |
-|------|------|
-| 查看菜谱 | 输入菜名即可查看完整做法 |
-| 添加菜谱 | 查询不存在的菜名时自动引导添加 |
-| 导入菜谱 | 批量添加新菜谱，支持连续导入 |
-| 编辑菜谱 | 在原有步骤上直接修改（预填充），可增删步骤 |
-| 删除菜谱 | 按菜名或序号删除，二次确认防误删 |
-| 新建做菜记录 | 选择菜谱后逐步添加备注，支持整体备注和照片导入 |
-| 查看历史记录 | 浏览所有做菜记录，查看详情 |
-| 编辑记录备注 | 预填充原有备注，方便修改 |
-| 照片管理 | 追加或删除记录关联的照片 |
-| 删除记录 | 删除记录的同时自动清理照片文件 |
+## 功能概览
+
+### 1) 菜谱管理
+
+- 新增、查看、修改、删除菜谱
+- 菜谱包含「步骤 + 主要食材」
+- 支持从旧格式自动迁移（`{菜名: [步骤]}` -> 新格式）
+
+### 2) 做菜记录
+
+- 按菜谱创建一次做菜记录
+- 对每一步添加备注，支持整体备注
+- 支持拍照/上传照片并与记录关联
+- 支持编辑备注、删除记录、自动清理关联照片
+
+### 3) 可用食材管理与推荐（Web）
+
+- 维护当前可用食材（名称 + 购买日期）
+- 根据食材自动推荐可做菜谱（完全匹配/部分匹配）
+- 提供每日推荐（优先食材匹配，不足时随机推荐）
+
+## 技术栈
+
+- Python 3.10+
+- Streamlit（Web 界面）
+- JSON 文件持久化（无数据库）
 
 ## 目录结构
 
-```
+```text
 .
-├── main.py           # 程序入口：主菜单循环和用户交互分发
-├── config.py         # 配置模块：路径常量、默认菜谱、照片格式白名单
-├── storage.py        # 数据持久化：JSON 读写函数和全局数据持有
-├── helpers.py        # 输入工具：预填充输入、逐行步骤输入、选菜辅助
-├── recipes.py        # 菜谱管理：查看、添加、编辑、导入、删除
-├── records.py        # 做菜记录：新建、查看、编辑、删除、照片管理
-├── recipes.json      # [数据] 菜谱数据（自动生成）
-├── records.json      # [数据] 做菜记录数据（自动生成）
-├── photos/           # [数据] 照片存储目录，按记录 ID 分子目录
-│   └── <record_id>/
-│       ├── 1.jpg
-│       └── 2.png
-└── README.md         # 本文件
+├── main.py                  # CLI 入口
+├── web_app.py               # Streamlit 入口
+├── config.py                # 路径、默认数据、照片格式白名单
+├── storage.py               # recipes/records/ingredients 的读写与加载
+├── helpers.py               # CLI 输入辅助（含预填充输入）
+├── recipes.py               # CLI 菜谱管理
+├── records.py               # CLI 做菜记录与照片管理
+├── web/
+│   ├── sidebar.py           # 侧边栏
+│   ├── tab_recipe.py        # 菜谱管理页
+│   ├── tab_record.py        # 做菜记录页
+│   ├── tab_ingredients.py   # 可用食材页 + 推荐
+│   ├── daily_recommend.py   # 每日推荐
+│   └── ui_helpers.py        # Web 端通用函数
+├── recipes.json             # 菜谱数据
+├── records.json             # 做菜记录数据
+├── ingredients.json         # 可用食材数据
+└── photos/                  # 记录照片目录（按 record_id 分目录）
 ```
 
-## 模块依赖关系
+## 安装与运行
 
-```mermaid
-graph TD
-    main["main.py<br>程序入口"]
-    config["config.py<br>配置常量"]
-    storage["storage.py<br>数据读写"]
-    helpers["helpers.py<br>输入工具"]
-    recipes_mod["recipes.py<br>菜谱管理"]
-    records_mod["records.py<br>做菜记录"]
+### 1) 安装依赖
 
-    main --> storage
-    main --> recipes_mod
-    main --> records_mod
-    storage --> config
-    helpers --> storage
-    recipes_mod --> storage
-    recipes_mod --> helpers
-    records_mod --> config
-    records_mod --> storage
-    records_mod --> helpers
+```bash
+pip3 install streamlit
 ```
 
-## 数据文件格式
-
-### recipes.json
-
-键为菜名，值为步骤列表：
-
-```json
-{
-  "番茄炒蛋": [
-    "1. 鸡蛋打散，加少许盐搅匀",
-    "2. 番茄切块备用",
-    "3. 热锅凉油，倒入蛋液炒至凝固后盛出"
-  ],
-  "南瓜馒头": [
-    "1. 南瓜去皮切片，上锅蒸熟后压成泥",
-    "2. ..."
-  ]
-}
-```
-
-### records.json
-
-记录列表，每条记录包含以下字段：
-
-```json
-[
-  {
-    "id": "20260310_143052",
-    "name": "番茄炒蛋",
-    "date": "2026-03-10 14:30",
-    "steps": [
-      {
-        "text": "1. 鸡蛋打散，加少许盐搅匀",
-        "note": "用了 3 个鸡蛋"
-      },
-      {
-        "text": "2. 番茄切块备用",
-        "note": ""
-      }
-    ],
-    "note": "整体偏咸，下次少放盐",
-    "photos": [
-      "photos/20260310_143052/1.jpg",
-      "photos/20260310_143052/2.png"
-    ]
-  }
-]
-```
-
-## 核心交互流程
-
-```mermaid
-flowchart TD
-    Start["启动程序"] --> Menu["显示主菜单<br>列出所有菜品 + 操作选项"]
-    Menu --> Input["等待用户输入"]
-
-    Input -->|"输入菜名（已存在）"| ShowRecipe["显示菜谱做法"]
-    ShowRecipe --> AskUpdate{"是否更新？"}
-    AskUpdate -->|yes| EditSteps["逐步预填充编辑"]
-    AskUpdate -->|no| Menu
-    EditSteps --> Menu
-
-    Input -->|"输入菜名（不存在）"| AskAdd{"是否添加？"}
-    AskAdd -->|y| InputSteps["逐行输入步骤"]
-    AskAdd -->|n| Menu
-    InputSteps --> Menu
-
-    Input -->|"a"| ImportMode["导入菜谱模式<br>循环添加新菜谱"]
-    ImportMode --> Menu
-
-    Input -->|"d"| DeleteMode["选择并删除菜谱"]
-    DeleteMode --> Menu
-
-    Input -->|"r"| RecordMenu["做菜记录子菜单"]
-    RecordMenu --> NewRecord["新建记录"]
-    RecordMenu --> ViewRecords["查看历史记录"]
-    NewRecord --> PickRecipe["选择菜谱"]
-    PickRecipe --> StepNotes["逐步备注"]
-    StepNotes --> OverallNote["整体备注"]
-    OverallNote --> PhotoImport["导入照片（可选）"]
-    PhotoImport --> SaveRecord["保存记录"]
-    SaveRecord --> RecordMenu
-    ViewRecords --> RecordDetail["查看详情"]
-    RecordDetail --> EditNotes["编辑备注"]
-    RecordDetail --> ManagePhotos["管理照片"]
-    RecordDetail --> DeleteRecord["删除记录"]
-    RecordMenu -->|"b"| Menu
-
-    Input -->|"q"| Exit["退出程序"]
-```
-
-## 运行方式
-
-### 环境要求
-
-- Python 3.10+
-- macOS / Linux / Windows
-
-### 安装依赖
-
-macOS 用户建议安装 `gnureadline` 以获得更好的输入编辑体验（预填充功能依赖此包）：
+可选（推荐，尤其是 macOS CLI 体验）：
 
 ```bash
 pip3 install gnureadline
 ```
 
-> 如果未安装 `gnureadline`，程序会自动回退到系统自带的 readline，但 macOS 上预填充功能可能无法正常显示。
-
-### 启动程序
+### 2) 启动命令行版
 
 ```bash
 python3 main.py
 ```
 
-首次运行时会自动生成 `recipes.json`（包含两个示例菜谱）。做菜记录和照片会在使用过程中自动创建。
+### 3) 启动 Web 版
+
+```bash
+streamlit run web_app.py
+```
+
+默认会在本地打开浏览器页面（通常是 `http://localhost:8501`）。
+
+## 快速演示流程（3 分钟上手）
+
+### 路线 A：Web 版（推荐）
+
+1. 启动 Web：
+```bash
+streamlit run web_app.py
+```
+2. 在 `🥬 可用食材` 标签页添加 2-3 个食材（如：番茄、鸡蛋）。
+3. 切到 `🍳 菜谱管理`，新建一道菜并保存（或直接使用默认菜谱）。
+4. 切到 `📝 做菜记录`，点 `➕ 新建记录`，选择菜谱，填写步骤备注并保存。
+5. 回到记录列表，展开刚保存的记录，确认备注和照片（可选）已写入。
+
+### 路线 B：命令行版
+
+1. 启动 CLI：
+```bash
+python3 main.py
+```
+2. 在主菜单输入 `a`，导入一道新菜谱（菜名 + 食材 + 步骤）。
+3. 输入 `r` 进入做菜记录，选择 `1` 新建记录并填写备注。
+4. 返回记录菜单选择 `2` 查看历史记录，确认刚才的记录已保存。
+
+完成以上任一路线后，你会在项目目录看到（或更新）：
+
+- `recipes.json`
+- `records.json`
+- `ingredients.json`（Web 食材功能使用时）
+- `photos/<record_id>/...`（上传/拍照后）
+
+## 数据格式
+
+### `recipes.json`
+
+```json
+{
+  "番茄炒蛋": {
+    "steps": [
+      "1. 鸡蛋打散，加少许盐搅匀",
+      "2. 番茄切块备用"
+    ],
+    "ingredients": ["番茄", "鸡蛋"]
+  }
+}
+```
+
+### `records.json`
+
+```json
+[
+  {
+    "id": "20260310_161333",
+    "name": "番茄炒蛋",
+    "date": "2026-03-10 16:13",
+    "steps": [
+      { "text": "1. 鸡蛋打散，加少许盐搅匀", "note": "鸡蛋打得更均匀" }
+    ],
+    "note": "这次火候更好",
+    "photos": ["photos/20260310_161333/1.jpg"]
+  }
+]
+```
+
+### `ingredients.json`
+
+```json
+[
+  { "name": "番茄", "date": "2026-03-10" },
+  { "name": "鸡蛋", "date": "2026-03-10" }
+]
+```
+
+## 注意事项
+
+- 首次运行会自动生成默认菜谱（见 `config.py`）。
+- 照片支持格式由 `PHOTO_EXTS` 控制：`.jpg/.jpeg/.png/.heic/.webp/.gif/.bmp/.tiff`。
+- 数据以本地 JSON 文件保存，适合个人/家庭单机使用；多人并发编辑可能产生覆盖。
