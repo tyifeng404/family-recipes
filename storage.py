@@ -1,98 +1,81 @@
 """
-storage.py —— 数据持久化模块
+storage.py —— 数据持久化入口模块
 
-负责菜谱、做菜记录和可用食材三种数据的 JSON 读写。
-同时在模块级别加载数据，供其他模块通过 `import storage` 访问：
-    storage.recipes      —— 当前菜谱字典
-    storage.records      —— 当前做菜记录列表
-    storage.ingredients  —— 当前可用食材列表
+通过统一接口暴露菜谱/记录/食材读写，后端可切换：
+  - 本地 JSON（默认）
+  - Supabase（设置 STORAGE_BACKEND=supabase）
+
+环境变量（Supabase）:
+  - STORAGE_BACKEND=supabase
+  - SUPABASE_URL=...
+  - SUPABASE_SERVICE_ROLE_KEY=...  (或 SUPABASE_ANON_KEY)
+  - SUPABASE_STATE_TABLE=app_state (可选)
 """
 
-import json
 import os
 
-from config import DATA_FILE, RECORDS_FILE, INGREDIENTS_FILE, DEFAULT_RECIPES
+from storage_backends import LocalJsonBackend, SupabaseStateBackend
 
 
-# -------------------- 菜谱读写 --------------------
+def _build_backend():
+    backend_name = os.getenv("STORAGE_BACKEND", "local").strip().lower()
+    if backend_name != "supabase":
+        return LocalJsonBackend()
+
+    url = os.getenv("SUPABASE_URL", "").strip()
+    key = (
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+        or os.getenv("SUPABASE_ANON_KEY", "").strip()
+    )
+    table = os.getenv("SUPABASE_STATE_TABLE", "app_state").strip() or "app_state"
+
+    if not url or not key:
+        print(
+            "[storage] 未配置 SUPABASE_URL / SUPABASE_*_KEY，"
+            "已回退到本地 JSON 后端。"
+        )
+        return LocalJsonBackend()
+
+    try:
+        return SupabaseStateBackend(url=url, key=key, table=table)
+    except Exception as exc:
+        print(f"[storage] Supabase 初始化失败（{exc}），已回退到本地 JSON 后端。")
+        return LocalJsonBackend()
 
 
-def _migrate_recipes(data):
-    """将旧格式 {name: [steps]} 自动转为新格式 {name: {"steps": [...], "ingredients": [...]}}"""
-    migrated = False
-    for name in list(data.keys()):
-        if isinstance(data[name], list):
-            data[name] = {"steps": data[name], "ingredients": []}
-            migrated = True
-    return data, migrated
+_backend = _build_backend()
+
+
+def backend_name() -> str:
+    """返回当前启用的后端名称（local / supabase）。"""
+    return getattr(_backend, "name", "unknown")
 
 
 def load_recipes():
-    """
-    从 recipes.json 加载菜谱数据，自动迁移旧格式。
-
-    返回值:
-        dict —— 键为菜名，值为 {"steps": [...], "ingredients": [...]}
-    """
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        data, migrated = _migrate_recipes(data)
-        if migrated:
-            save_recipes(data)
-        return data
-    recipes = dict(DEFAULT_RECIPES)
-    save_recipes(recipes)
-    return recipes
+    return _backend.load_recipes()
 
 
 def save_recipes(recipes):
-    """将菜谱数据写入 recipes.json。"""
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(recipes, f, ensure_ascii=False, indent=2)
-
-
-# -------------------- 做菜记录读写 --------------------
+    _backend.save_recipes(recipes)
 
 
 def load_records():
-    """从 records.json 加载做菜记录列表。"""
-    if os.path.exists(RECORDS_FILE):
-        with open(RECORDS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+    return _backend.load_records()
 
 
 def save_records(records):
-    """将做菜记录列表写入 records.json。"""
-    with open(RECORDS_FILE, "w", encoding="utf-8") as f:
-        json.dump(records, f, ensure_ascii=False, indent=2)
-
-
-# -------------------- 可用食材读写 --------------------
+    _backend.save_records(records)
 
 
 def load_ingredients():
-    """
-    从 ingredients.json 加载可用食材列表。
-
-    返回值:
-        list —— 食材字典列表，每项包含 name（名称）和 date（购买日期）
-    """
-    if os.path.exists(INGREDIENTS_FILE):
-        with open(INGREDIENTS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+    return _backend.load_ingredients()
 
 
 def save_ingredients(ingredients):
-    """将可用食材列表写入 ingredients.json。"""
-    with open(INGREDIENTS_FILE, "w", encoding="utf-8") as f:
-        json.dump(ingredients, f, ensure_ascii=False, indent=2)
+    _backend.save_ingredients(ingredients)
 
 
 # -------------------- 模块级数据加载 --------------------
-
 recipes = load_recipes()
 records = load_records()
 ingredients = load_ingredients()

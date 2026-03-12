@@ -39,10 +39,14 @@
 ├── main.py                  # CLI 入口
 ├── web_app.py               # Streamlit 入口
 ├── config.py                # 路径、默认数据、照片格式白名单
-├── storage.py               # recipes/records/ingredients 的读写与加载
+├── storage.py               # 存储入口（可切本地 JSON / Supabase）
+├── storage_backends.py      # 存储后端实现
 ├── helpers.py               # CLI 输入辅助（含预填充输入）
 ├── recipes.py               # CLI 菜谱管理
 ├── records.py               # CLI 做菜记录与照片管理
+├── scripts/
+│   ├── supabase_init.sql    # Supabase 初始化 SQL
+│   └── migrate_local_to_supabase.py
 ├── web/
 │   ├── sidebar.py           # 侧边栏
 │   ├── tab_recipe.py        # 菜谱管理页
@@ -62,6 +66,12 @@
 
 ```bash
 pip3 install streamlit
+```
+
+使用 Supabase 同步时，还需要：
+
+```bash
+pip3 install supabase
 ```
 
 可选（推荐，尤其是 macOS CLI 体验）：
@@ -84,6 +94,40 @@ streamlit run web_app.py
 
 默认会在本地打开浏览器页面（通常是 `http://localhost:8501`）。
 
+## 云端同步（Supabase）
+
+当前版本已支持把菜谱/记录/食材切换到 Supabase 存储（用于多人共享同步）。
+
+### 1) 初始化 Supabase 表
+
+在 Supabase SQL Editor 执行：
+
+- `scripts/supabase_init.sql`
+
+### 2) 配置环境变量
+
+```bash
+export STORAGE_BACKEND=supabase
+export SUPABASE_URL="https://<project-ref>.supabase.co"
+export SUPABASE_SERVICE_ROLE_KEY="<your-service-role-key>"
+# 可选：默认是 app_state
+export SUPABASE_STATE_TABLE="app_state"
+```
+
+> 如果未配置这些变量，程序会自动回退到本地 JSON 存储。
+
+### 3) 迁移本地数据（一次性）
+
+```bash
+python3 scripts/migrate_local_to_supabase.py
+```
+
+### 4) 启动应用
+
+```bash
+streamlit run web_app.py
+```
+
 ## 快速演示流程（3 分钟上手）
 
 ### 路线 A：Web 版（推荐）
@@ -94,7 +138,7 @@ streamlit run web_app.py
 ```
 2. 在 `🥬 可用食材` 标签页添加 2-3 个食材（如：番茄、鸡蛋）。
 3. 切到 `🍳 菜谱管理`，新建一道菜并保存（或直接使用默认菜谱）。
-4. 切到 `📝 做菜记录`，点 `➕ 新建记录`，选择菜谱，填写步骤备注并保存。
+4. 切到 `📝 做菜记录`，点 `➕ 新建做菜记录`，选择菜谱，填写步骤备注并保存。
 5. 回到记录列表，展开刚保存的记录，确认备注和照片（可选）已写入。
 
 ### 路线 B：命令行版
