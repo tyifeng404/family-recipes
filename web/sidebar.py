@@ -4,6 +4,8 @@ web/sidebar.py —— 侧边栏：菜谱搜索 + 可用食材目录
 
 import streamlit as st
 
+import storage
+
 
 def render_sidebar(recipes: dict, ingredients_data: list, records: list):
     """渲染侧边栏内容。"""
@@ -53,3 +55,4 @@ def render_sidebar(recipes: dict, ingredients_data: list, records: list):
             f"{len(recipes)} 道菜谱 · {len(records)} 条记录 · "
             f"{len(ingredients_data)} 种食材"
         )
+        st.caption(f"存储后端：`{storage.backend_name()}`")

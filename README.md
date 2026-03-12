@@ -128,6 +128,31 @@ python3 scripts/migrate_local_to_supabase.py
 streamlit run web_app.py
 ```
 
+### 5) Streamlit Cloud 配置（部署端）
+
+在 Streamlit Cloud 的应用设置中添加 Secrets（不是系统环境变量）：
+
+```toml
+STORAGE_BACKEND="supabase"
+SUPABASE_URL="https://<project-ref>.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY="<your-service-role-key>"
+SUPABASE_STATE_TABLE="app_state"
+```
+
+保存后 Reboot 应用，进入页面后在左侧底部确认显示：
+
+- `存储后端：supabase`
+
+### 6) 双账号同步验收（建议 3 分钟）
+
+1. 账号 A 打开应用，新增一道菜谱（例如 `同步测试-今天日期`）。
+2. 账号 B 刷新页面，确认能看到该菜谱。
+3. 账号 B 新建一条做菜记录并保存。
+4. 账号 A 刷新，确认记录列表出现该条记录。
+5. 任一账号修改该记录备注，另一账号刷新确认变更可见。
+
+如果左下角显示 `存储后端：local`，说明云端 Secrets 未生效或键名有误。
+
 ## 快速演示流程（3 分钟上手）
 
 ### 路线 A：Web 版（推荐）
