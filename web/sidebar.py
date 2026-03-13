@@ -56,3 +56,6 @@ def render_sidebar(recipes: dict, ingredients_data: list, records: list):
             f"{len(ingredients_data)} 种食材"
         )
         st.caption(f"存储后端：`{storage.backend_name()}`")
+        diag = storage.backend_diagnostic()
+        if storage.backend_name() == "local" and "当前使用本地存储" not in diag and diag:
+            st.caption(f"后端诊断：{diag}")

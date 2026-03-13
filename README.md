@@ -74,6 +74,12 @@ pip3 install streamlit
 pip3 install supabase
 ```
 
+也可以直接使用项目依赖文件安装：
+
+```bash
+pip3 install -r requirements.txt
+```
+
 可选（推荐，尤其是 macOS CLI 体验）：
 
 ```bash
