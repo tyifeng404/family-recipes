@@ -18,7 +18,6 @@ from web.sidebar import render_sidebar
 from web.tab_recipe import render_recipe_tab
 from web.tab_record import render_record_tab
 from web.tab_ingredients import render_ingredients_tab
-from web.tab_account import render_account_tab
 from web.account_dialog import render_account_dialog
 from web.daily_recommend import render_daily_recommendations
 
@@ -128,8 +127,8 @@ render_daily_recommendations(visible_recipes, visible_ingredients)
 #  三个主 Tab
 # ═══════════════════════════════════════════
 
-tab_recipe, tab_record, tab_ingredients, tab_account = st.tabs(
-    ["🍳 菜谱管理", "📝 做菜记录", "🥬 可用食材", "👤 账号管理"]
+tab_recipe, tab_record, tab_ingredients = st.tabs(
+    ["🍳 菜谱管理", "📝 做菜记录", "🥬 可用食材"]
 )
 
 with tab_recipe:
@@ -155,6 +154,3 @@ with tab_ingredients:
         user,
         is_admin_user,
     )
-
-with tab_account:
-    render_account_tab(user, is_admin_user)

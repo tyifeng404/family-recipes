@@ -1,14 +1,12 @@
-"""web/tab_recipe.py —— Tab 1：菜谱管理（分类折叠 / 搜索 / 添加 / 修改）"""
+"""web/tab_recipe.py —— Tab 1：菜谱管理（分类下拉 / 搜索 / 添加 / 修改）"""
 
 from __future__ import annotations
 
 import hashlib
-import os
 
 import streamlit as st
 
 import storage
-from config import BASE_DIR
 from cuisine import (
     BASE_TAG_OPTIONS,
     CHINESE_CUISINE_OPTIONS,
@@ -161,18 +159,6 @@ def _record_links_for_recipe(recipe_name: str, visible_records: list) -> list[tu
     return links
 
 
-def _photo_source(photo: str) -> str | None:
-    p = str(photo or "").strip()
-    if not p:
-        return None
-    if p.startswith("http://") or p.startswith("https://"):
-        return p
-    full = os.path.join(BASE_DIR, p)
-    if os.path.isfile(full):
-        return full
-    return None
-
-
 def _show_search_results(
     recipes: dict,
     visible_records: list,
@@ -198,25 +184,6 @@ def _show_search_results(
         st.rerun()
 
 
-def _toggle_key(prefix: str, *parts: str) -> str:
-    raw = "|".join([prefix, *parts])
-    return f"{prefix}_{hashlib.md5(raw.encode('utf-8')).hexdigest()[:10]}"
-
-
-def _render_expand_toggle(label: str, state_key: str):
-    if state_key not in st.session_state:
-        st.session_state[state_key] = True
-
-    col_l, col_b = st.columns([8, 1])
-    with col_l:
-        st.markdown(label)
-    with col_b:
-        btn_text = "收起" if st.session_state[state_key] else "展开"
-        if st.button(btn_text, key=f"btn_{state_key}", use_container_width=True):
-            st.session_state[state_key] = not st.session_state[state_key]
-            st.rerun()
-
-
 def _show_all_recipes_grouped(recipes: dict, visible_records: list, current_user: str, is_admin_user: bool):
     if not recipes:
         st.info("还没有任何菜谱，快来添加第一道吧！")
@@ -231,20 +198,34 @@ def _show_all_recipes_grouped(recipes: dict, visible_records: list, current_user
         group = normalize_cuisine_group(data.get("cuisine_group") or infer_cuisine_group(cuisine))
         groups.setdefault(group, {}).setdefault(cuisine, []).append((name, data))
 
-    for group in sorted(groups.keys()):
-        g_state = _toggle_key("grp", group)
-        _render_expand_toggle(f"### {group}", g_state)
-        if not st.session_state[g_state]:
+    group_placeholder = "（默认收起）请选择大类"
+    group_options = [group_placeholder] + sorted(groups.keys())
+    selected_group = st.selectbox("展开大类", group_options, key="recipe_expand_group")
+    if selected_group == group_placeholder:
+        st.caption("默认收起：请选择一个大类后展开查看。")
+        return
+
+    cuisines = groups.get(selected_group, {})
+    cuisine_options = ["全部细分类"] + sorted(cuisines.keys())
+    selected_cuisine = st.selectbox(
+        "展开细分类",
+        cuisine_options,
+        key="recipe_expand_cuisine",
+    )
+
+    st.markdown(f"### {selected_group}")
+    cuisine_names = (
+        sorted(cuisines.keys())
+        if selected_cuisine == "全部细分类"
+        else [selected_cuisine]
+    )
+    for cuisine in cuisine_names:
+        entries = cuisines.get(cuisine, [])
+        if not entries:
             continue
-
-        for cuisine in sorted(groups[group].keys()):
-            c_state = _toggle_key("cui", group, cuisine)
-            _render_expand_toggle(f"**{cuisine}**", c_state)
-            if not st.session_state[c_state]:
-                continue
-
-            for name, data in groups[group][cuisine]:
-                with st.expander(f"📖 {name}"):
+        with st.expander(f"**{cuisine}**（{len(entries)}）", expanded=True):
+            for name, data in entries:
+                with st.expander(f"📖 {name}", expanded=False):
                     _render_recipe_detail(name, data, visible_records, current_user, is_admin_user)
 
 
@@ -255,7 +236,7 @@ def _render_recipe_detail(
     current_user: str,
     is_admin_user: bool,
 ):
-    # 排列顺序：名称、主要食材、全部食材、详细菜谱、要点、照片、做菜记录链接
+    # 排列顺序：名称、主要食材、全部食材、详细菜谱、要点、做菜记录链接
     st.markdown(f"**名称：{name}**")
     _show_meta(data, current_user)
 
@@ -279,13 +260,6 @@ def _render_recipe_detail(
             st.markdown(f"&emsp;{tip}")
     else:
         st.caption("（未填写）")
-
-    st.markdown("**照片：**")
-    photo_src = _photo_source(data.get("photo", ""))
-    if photo_src:
-        st.image(photo_src, use_container_width=True)
-    else:
-        st.caption("（未导入照片）")
 
     links = _record_links_for_recipe(name, visible_records)
     with st.expander(f"🔗 这道菜已保存做菜记录的链接（{len(links)}）", expanded=False):
@@ -484,13 +458,6 @@ def _show_recipe_form(recipes: dict, current_user: str, is_admin_user: bool):
         placeholder="例如：\n火候控制\n先后顺序\n收汁时机",
     )
 
-    photo_input = st.text_input(
-        "照片路径或URL（可选）",
-        value=str(old_data.get("photo", "")) if is_editing else "",
-        key="inp_photo",
-        placeholder="例如：assets/recipe_photos/xxxx.svg",
-    )
-
     col_save, col_cancel, _ = st.columns([1, 1, 4])
     with col_save:
         save_clicked = st.button("保存", type="primary", use_container_width=True, key="save_recipe")
@@ -528,7 +495,7 @@ def _show_recipe_form(recipes: dict, current_user: str, is_admin_user: bool):
 
         owner = old_owner if is_editing else current_user
         old_is_builtin = bool(old_data.get("is_builtin", False))
-        final_photo = photo_input.strip() or old_data.get("photo", "")
+        final_photo = old_data.get("photo", "") if is_editing else ""
 
         recipes[final_name] = {
             "steps": detailed_steps,
@@ -577,7 +544,6 @@ def _reset_form():
         "inp_all_ingredients",
         "inp_steps",
         "inp_tips",
-        "inp_photo",
     ]:
         if key in st.session_state:
             del st.session_state[key]
