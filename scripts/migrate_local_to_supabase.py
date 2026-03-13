@@ -41,15 +41,18 @@ def main():
     recipes = local_backend.load_recipes()
     records = local_backend.load_records()
     ingredients = local_backend.load_ingredients()
+    accounts = local_backend.load_accounts()
 
     cloud_backend.save_recipes(recipes)
     cloud_backend.save_records(records)
     cloud_backend.save_ingredients(ingredients)
+    cloud_backend.save_accounts(accounts)
 
     print("迁移完成：")
     print(f"- recipes: {len(recipes)}")
     print(f"- records: {len(records)}")
     print(f"- ingredients: {len(ingredients)}")
+    print(f"- accounts: {len(accounts)}")
     print(f"- table: {table}")
 
 

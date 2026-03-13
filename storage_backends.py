@@ -10,7 +10,13 @@ import copy
 import json
 import os
 
-from config import DATA_FILE, DEFAULT_RECIPES, INGREDIENTS_FILE, RECORDS_FILE
+from config import (
+    ACCOUNTS_FILE,
+    DATA_FILE,
+    DEFAULT_RECIPES,
+    INGREDIENTS_FILE,
+    RECORDS_FILE,
+)
 
 
 def _migrate_recipes(data: dict) -> tuple[dict, bool]:
@@ -76,6 +82,15 @@ class LocalJsonBackend:
 
     def save_ingredients(self, ingredients: list) -> None:
         _save_json_file(INGREDIENTS_FILE, ingredients)
+
+    def load_accounts(self) -> list:
+        data = _load_json_file(ACCOUNTS_FILE, [])
+        if isinstance(data, list):
+            return data
+        raise RuntimeError(f"{ACCOUNTS_FILE} 数据格式错误，期望 list")
+
+    def save_accounts(self, accounts: list) -> None:
+        _save_json_file(ACCOUNTS_FILE, accounts)
 
 
 class SupabaseStateBackend:
@@ -155,3 +170,12 @@ class SupabaseStateBackend:
 
     def save_ingredients(self, ingredients: list) -> None:
         self._upsert_state("ingredients", ingredients)
+
+    def load_accounts(self) -> list:
+        data = self._read_state("accounts", [])
+        if isinstance(data, list):
+            return data
+        raise RuntimeError("Supabase app_state.accounts 数据格式错误，期望 list")
+
+    def save_accounts(self, accounts: list) -> None:
+        self._upsert_state("accounts", accounts)

@@ -10,8 +10,10 @@
 ### 1) 菜谱管理
 
 - 新增、查看、修改、删除菜谱
-- 菜谱包含「步骤 + 主要食材」
+- 菜谱包含「步骤 + 主要食材 + 菜系」
+- 菜谱按菜系分组展示，支持菜名/食材/菜系搜索
 - 支持从旧格式自动迁移（`{菜名: [步骤]}` -> 新格式）
+- 内置约 150 道经典菜谱（中餐约 100 + 西餐约 50），首次加载自动补齐
 
 ### 2) 做菜记录
 
@@ -26,11 +28,19 @@
 - 根据食材自动推荐可做菜谱（完全匹配/部分匹配）
 - 提供每日推荐（优先食材匹配，不足时随机推荐）
 
+### 4) 账号与共享（Web）
+
+- 账号注册与登录（账户名称、密码、真实姓名、手机号）
+- 管理员审核新账号（通过/拒绝）
+- 账号管理页可修改注册信息与密码
+- 每个账号可配置是否共享：菜谱 / 做菜记录 / 食材
+
 ## 技术栈
 
 - Python 3.10+
 - Streamlit（Web 界面）
-- JSON 文件持久化（无数据库）
+- JSON 文件持久化（默认）
+- Supabase（可选云端同步）
 
 ## 目录结构
 
@@ -38,6 +48,8 @@
 .
 ├── main.py                  # CLI 入口
 ├── web_app.py               # Streamlit 入口
+├── builtin_recipes.py       # 内置菜谱库（约 150 道）
+├── cuisine.py               # 菜系常量与工具
 ├── config.py                # 路径、默认数据、照片格式白名单
 ├── storage.py               # 存储入口（可切本地 JSON / Supabase）
 ├── storage_backends.py      # 存储后端实现
@@ -48,10 +60,12 @@
 │   ├── supabase_init.sql    # Supabase 初始化 SQL
 │   └── migrate_local_to_supabase.py
 ├── web/
+│   ├── auth.py              # 登录/注册
 │   ├── sidebar.py           # 侧边栏
 │   ├── tab_recipe.py        # 菜谱管理页
 │   ├── tab_record.py        # 做菜记录页
 │   ├── tab_ingredients.py   # 可用食材页 + 推荐
+│   ├── tab_account.py       # 账号管理页
 │   ├── daily_recommend.py   # 每日推荐
 │   └── ui_helpers.py        # Web 端通用函数
 ├── recipes.json             # 菜谱数据
@@ -118,6 +132,13 @@ export SUPABASE_URL="https://<project-ref>.supabase.co"
 export SUPABASE_SERVICE_ROLE_KEY="<your-service-role-key>"
 # 可选：默认是 app_state
 export SUPABASE_STATE_TABLE="app_state"
+```
+
+可选（管理员初始账号）：
+
+```bash
+export ADMIN_USERNAME="admin"
+export ADMIN_PASSWORD="admin123456"
 ```
 
 > 如果未配置这些变量，程序会自动回退到本地 JSON 存储。

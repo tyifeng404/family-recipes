@@ -9,17 +9,30 @@ import streamlit as st
 import storage
 
 
-def render_ingredients_tab(recipes: dict, ingredients_data: list):
+def _can_edit(ing: dict, current_user: str, is_admin_user: bool) -> bool:
+    owner = ing.get("owner", "admin")
+    return is_admin_user or owner == current_user
+
+
+def render_ingredients_tab(
+    recipes: dict,
+    ingredients_data: list,
+    visible_ingredients: list,
+    current_user: str,
+    is_admin_user: bool,
+):
     """渲染可用食材 Tab 的全部内容。"""
     st.subheader("🥬 可用食材管理")
 
-    _render_add_form(ingredients_data)
+    _render_add_form(ingredients_data, current_user)
 
     st.divider()
-    _render_ingredient_list(ingredients_data)
+    _render_ingredient_list(
+        ingredients_data, visible_ingredients, current_user, is_admin_user
+    )
 
     st.divider()
-    _render_recommendations(recipes, ingredients_data)
+    _render_recommendations(recipes, visible_ingredients)
 
 
 # ────────────────────────────────────────────
@@ -27,7 +40,7 @@ def render_ingredients_tab(recipes: dict, ingredients_data: list):
 # ────────────────────────────────────────────
 
 
-def _render_add_form(ingredients_data: list):
+def _render_add_form(ingredients_data: list, current_user: str):
     with st.container(border=True):
         st.markdown("**➕ 添加新食材**")
         col_name, col_date, col_btn = st.columns([2, 2, 1])
@@ -53,12 +66,19 @@ def _render_add_form(ingredients_data: list):
             if not ing_name:
                 st.error("请输入食材名称！")
             else:
-                existing_names = {ing["name"] for ing in ingredients_data}
+                existing_names = {
+                    ing["name"] for ing in ingredients_data
+                    if ing.get("owner", "admin") == current_user
+                }
                 if ing_name in existing_names:
-                    st.warning(f"「{ing_name}」已在可用食材清单中。")
+                    st.warning(f"「{ing_name}」已在你的食材清单中。")
                 else:
                     ingredients_data.append(
-                        {"name": ing_name, "date": new_ing_date.isoformat()}
+                        {
+                            "name": ing_name,
+                            "date": new_ing_date.isoformat(),
+                            "owner": current_user,
+                        }
                     )
                     storage.save_ingredients(ingredients_data)
                     storage.ingredients = ingredients_data
@@ -73,14 +93,22 @@ def _render_add_form(ingredients_data: list):
 # ────────────────────────────────────────────
 
 
-def _render_ingredient_list(ingredients_data: list):
+def _render_ingredient_list(
+    ingredients_data: list,
+    visible_ingredients: list,
+    current_user: str,
+    is_admin_user: bool,
+):
     st.markdown("**📦 当前可用食材清单**")
 
-    if not ingredients_data:
+    if not visible_ingredients:
         st.info("暂无可用食材，请在上方添加。")
         return
 
-    for idx, ing in enumerate(ingredients_data):
+    for ing in visible_ingredients:
+        idx = next((i for i, item in enumerate(ingredients_data) if id(item) == id(ing)), -1)
+        if idx == -1:
+            continue
         col_info, col_del = st.columns([5, 1])
         with col_info:
             st.markdown(
@@ -89,12 +117,17 @@ def _render_ingredient_list(ingredients_data: list):
                 f"购买于 {ing['date']}</span>",
                 unsafe_allow_html=True,
             )
+            owner = ing.get("owner", "admin")
+            if owner != current_user:
+                st.caption(f"来源账号：{owner}")
         with col_del:
-            if st.button("🗑️", key=f"del_ing_{idx}"):
+            if _can_edit(ing, current_user, is_admin_user) and st.button("🗑️", key=f"del_ing_{idx}"):
                 ingredients_data.pop(idx)
                 storage.save_ingredients(ingredients_data)
                 storage.ingredients = ingredients_data
                 st.rerun()
+            elif not _can_edit(ing, current_user, is_admin_user):
+                st.caption("只读")
 
 
 # ────────────────────────────────────────────

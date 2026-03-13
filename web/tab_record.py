@@ -13,7 +13,21 @@ from web.record_new_dialog import render_new_record_dialog
 from web.record_shared import remove_photo_file
 
 
-def render_record_tab(recipes: dict, records: list, ingredients_data: list):
+def _can_edit(rec: dict, current_user: str, is_admin_user: bool) -> bool:
+    owner = rec.get("owner", "admin")
+    return is_admin_user or owner == current_user
+
+
+def render_record_tab(
+    recipes: dict,
+    visible_recipes: dict,
+    records: list,
+    visible_records: list,
+    ingredients_data: list,
+    visible_ingredients: list,
+    current_user: str,
+    is_admin_user: bool,
+):
     """渲染做菜记录 Tab 的全部内容。"""
     st.subheader("📋 做菜记录")
 
@@ -31,22 +45,38 @@ def render_record_tab(recipes: dict, records: list, ingredients_data: list):
         st.session_state["open_new_record_dialog"] = True
 
     st.divider()
-    _render_history(records)
+    _render_history(records, visible_records, current_user, is_admin_user)
 
     if st.session_state.get("open_new_record_dialog", False):
-        render_new_record_dialog(recipes, records, ingredients_data)
+        render_new_record_dialog(
+            visible_recipes,
+            records,
+            ingredients_data,
+            visible_ingredients,
+            current_user,
+            is_admin_user,
+        )
 
     edit_idx = st.session_state.get("editing_record_idx", -1)
     if 0 <= edit_idx < len(records):
-        render_edit_record_dialog(records)
+        render_edit_record_dialog(records, current_user, is_admin_user)
 
 
-def _render_history(records: list):
-    if not records:
+def _render_history(
+    records: list,
+    visible_records: list,
+    current_user: str,
+    is_admin_user: bool,
+):
+    if not visible_records:
         st.info("暂无做菜记录，快去做一道菜并记录吧！")
         return
 
-    for i, rec in enumerate(records):
+    index_map = {id(rec): idx for idx, rec in enumerate(records)}
+    for rec in visible_records:
+        i = index_map.get(id(rec), -1)
+        if i == -1:
+            continue
         notes_count = sum(1 for s in rec["steps"] if s["note"])
         photos_count = len(rec.get("photos", []))
         label_parts = [f"[{rec['date']}] {rec['name']}"]
@@ -59,6 +89,9 @@ def _render_history(records: list):
             label_parts.append(f"（{'，'.join(detail)}）")
 
         with st.expander("".join(label_parts)):
+            owner = rec.get("owner", "admin")
+            if owner != current_user:
+                st.caption(f"来源账号：{owner}")
             for step in rec["steps"]:
                 st.markdown(f"&emsp;{step['text']}")
                 if step["note"]:
@@ -84,15 +117,20 @@ def _render_history(records: list):
 
             col_edit, col_del, _ = st.columns([1, 1, 4])
             with col_edit:
-                if st.button("✏️ 编辑备注/照片", key=f"edit_rec_{i}"):
+                if _can_edit(rec, current_user, is_admin_user) and st.button(
+                    "✏️ 编辑备注/照片", key=f"edit_rec_{i}"
+                ):
                     st.session_state["editing_record_idx"] = i
                     st.session_state["edit_rec_loaded_idx"] = -1
                     st.rerun()
+                elif not _can_edit(rec, current_user, is_admin_user):
+                    st.caption("仅创建者或管理员可编辑")
             with col_del:
-                with st.popover("🗑️ 删除"):
-                    st.warning("确认删除此记录？删除后不可恢复。")
-                    if st.button("确认删除", key=f"confirm_del_{i}"):
-                        _delete_record(records, i, rec)
+                if _can_edit(rec, current_user, is_admin_user):
+                    with st.popover("🗑️ 删除"):
+                        st.warning("确认删除此记录？删除后不可恢复。")
+                        if st.button("确认删除", key=f"confirm_del_{i}"):
+                            _delete_record(records, i, rec)
 
 
 def _delete_record(records: list, idx: int, rec: dict):

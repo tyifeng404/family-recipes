@@ -78,8 +78,10 @@ def _save_new_record(
     selected: str,
     steps: list[str],
     records: list,
-    ingredients_data: list,
+    all_ingredients: list,
     matching_ings: list[str],
+    current_user: str,
+    is_admin_user: bool,
 ):
     step_notes = [
         st.session_state.get(f"new_rec_note_{i}", "").strip()
@@ -94,6 +96,7 @@ def _save_new_record(
     record = {
         "id": record_id,
         "name": selected,
+        "owner": current_user,
         "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "steps": [
             {"text": step, "note": note}
@@ -112,9 +115,14 @@ def _save_new_record(
         if st.session_state.get(f"new_rec_used_{name}", False)
     ]
     if used_up:
-        updated_ings = [
-            ing for ing in ingredients_data if ing["name"] not in set(used_up)
-        ]
+        targets = set(used_up)
+        updated_ings = []
+        for ing in all_ingredients:
+            owner = ing.get("owner", "admin")
+            can_delete = is_admin_user or owner == current_user
+            if can_delete and ing.get("name") in targets:
+                continue
+            updated_ings.append(ing)
         storage.save_ingredients(updated_ings)
         storage.ingredients = updated_ings
 
@@ -130,7 +138,10 @@ def _save_new_record(
 def render_new_record_dialog(
     recipes: dict,
     records: list,
-    ingredients_data: list,
+    all_ingredients: list,
+    visible_ingredients: list,
+    current_user: str,
+    is_admin_user: bool,
 ):
     if not recipes:
         st.warning("请先在「菜谱管理」中添加菜谱，再来创建记录。")
@@ -174,8 +185,8 @@ def render_new_record_dialog(
     _render_new_record_photo_picker()
 
     matching_ings: list[str] = []
-    if recipe_ings and ingredients_data:
-        avail_names = {ing["name"] for ing in ingredients_data}
+    if recipe_ings and visible_ingredients:
+        avail_names = {ing["name"] for ing in visible_ingredients}
         matching_ings = [n for n in recipe_ings if n in avail_names]
 
     if matching_ings:
@@ -197,8 +208,10 @@ def render_new_record_dialog(
                 selected,
                 steps,
                 records,
-                ingredients_data,
+                all_ingredients,
                 matching_ings,
+                current_user,
+                is_admin_user,
             )
     with col_cancel:
         with st.popover("❌ 取消", use_container_width=True):

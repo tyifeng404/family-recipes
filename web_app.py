@@ -7,10 +7,18 @@ web_app.py —— 基于 Streamlit 的家庭菜谱 Web 界面（入口）
 import streamlit as st
 
 import storage
+from web.auth import (
+    current_user,
+    current_user_is_admin,
+    ensure_auth_state,
+    is_logged_in,
+    render_auth_page,
+)
 from web.sidebar import render_sidebar
 from web.tab_recipe import render_recipe_tab
 from web.tab_record import render_record_tab
 from web.tab_ingredients import render_ingredients_tab
+from web.tab_account import render_account_tab
 from web.daily_recommend import render_daily_recommendations
 
 # ───────── 页面配置 ─────────
@@ -64,11 +72,29 @@ for _k, _v in _defaults.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
 
+ensure_auth_state()
+
+# ───────── 账号初始化与登录门禁 ─────────
+
+accounts = storage.ensure_admin_account()
+
+if not is_logged_in():
+    render_auth_page()
+    st.stop()
+
+user = current_user()
+is_admin_user = current_user_is_admin()
+
 # ───────── 加载数据（每次 rerun 都从文件读最新） ─────────
 
 recipes = storage.load_recipes()
 records = storage.load_records()
 ingredients_data = storage.load_ingredients()
+accounts = storage.load_accounts()
+
+visible_recipes = storage.get_visible_recipes(recipes, accounts, user)
+visible_records = storage.get_visible_records(records, accounts, user)
+visible_ingredients = storage.get_visible_ingredients(ingredients_data, accounts, user)
 
 # ───────── 保存成功提示 ─────────
 
@@ -79,25 +105,49 @@ if st.session_state.save_msg:
 
 # ───────── 侧边栏 ─────────
 
-render_sidebar(recipes, ingredients_data, records)
+render_sidebar(
+    visible_recipes,
+    visible_ingredients,
+    visible_records,
+    current_user=user,
+    is_admin=is_admin_user,
+)
 
 # ───────── 每日推荐菜谱 ─────────
 
-render_daily_recommendations(recipes, ingredients_data)
+render_daily_recommendations(visible_recipes, visible_ingredients)
 
 # ═══════════════════════════════════════════
 #  三个主 Tab
 # ═══════════════════════════════════════════
 
-tab_recipe, tab_record, tab_ingredients = st.tabs(
-    ["🍳 菜谱管理", "📝 做菜记录", "🥬 可用食材"]
+tab_recipe, tab_record, tab_ingredients, tab_account = st.tabs(
+    ["🍳 菜谱管理", "📝 做菜记录", "🥬 可用食材", "👤 账号管理"]
 )
 
 with tab_recipe:
-    render_recipe_tab(recipes)
+    render_recipe_tab(recipes, visible_recipes, user, is_admin_user)
 
 with tab_record:
-    render_record_tab(recipes, records, ingredients_data)
+    render_record_tab(
+        recipes,
+        visible_recipes,
+        records,
+        visible_records,
+        ingredients_data,
+        visible_ingredients,
+        user,
+        is_admin_user,
+    )
 
 with tab_ingredients:
-    render_ingredients_tab(recipes, ingredients_data)
+    render_ingredients_tab(
+        visible_recipes,
+        ingredients_data,
+        visible_ingredients,
+        user,
+        is_admin_user,
+    )
+
+with tab_account:
+    render_account_tab(user, is_admin_user)

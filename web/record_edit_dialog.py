@@ -148,13 +148,24 @@ def _save_edit_record(records: list, edit_idx: int):
     st.rerun()
 
 
+def _can_edit(rec: dict, current_user: str, is_admin_user: bool) -> bool:
+    owner = rec.get("owner", "admin")
+    return is_admin_user or owner == current_user
+
+
 @st.dialog("✏️ 编辑记录（备注 + 照片）")
-def render_edit_record_dialog(records: list):
+def render_edit_record_dialog(records: list, current_user: str, is_admin_user: bool):
     edit_idx = st.session_state.get("editing_record_idx", -1)
     if not (0 <= edit_idx < len(records)):
         return
 
     rec = records[edit_idx]
+    if not _can_edit(rec, current_user, is_admin_user):
+        st.error("你没有权限编辑该记录。")
+        if st.button("关闭", use_container_width=True):
+            close_edit_dialog()
+            st.rerun()
+        return
     _init_edit_state(rec, edit_idx)
 
     for j, step in enumerate(rec["steps"]):

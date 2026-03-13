@@ -27,5 +27,6 @@ insert into public.app_state (key, value)
 values
   ('recipes', '{}'::jsonb),
   ('records', '[]'::jsonb),
-  ('ingredients', '[]'::jsonb)
+  ('ingredients', '[]'::jsonb),
+  ('accounts', '[]'::jsonb)
 on conflict (key) do nothing;

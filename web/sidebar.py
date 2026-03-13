@@ -5,11 +5,26 @@ web/sidebar.py —— 侧边栏：菜谱搜索 + 可用食材目录
 import streamlit as st
 
 import storage
+from cuisine import infer_cuisine_group
+from web.auth import logout
 
 
-def render_sidebar(recipes: dict, ingredients_data: list, records: list):
+def render_sidebar(
+    recipes: dict,
+    ingredients_data: list,
+    records: list,
+    current_user: str,
+    is_admin: bool,
+):
     """渲染侧边栏内容。"""
     with st.sidebar:
+        st.markdown(f"**当前账号：** `{current_user}`")
+        st.caption("角色：管理员" if is_admin else "角色：普通用户")
+        if st.button("退出登录", key="btn_logout", use_container_width=True):
+            logout()
+            st.rerun()
+        st.divider()
+
         # ── 菜谱搜索 ──
         st.header("🔍 菜谱搜索")
         sidebar_query = st.text_input(
@@ -23,11 +38,27 @@ def render_sidebar(recipes: dict, ingredients_data: list, records: list):
             sb_results = []
             for name, data in recipes.items():
                 ings = data.get("ingredients", [])
-                if q in name.lower() or any(q in ig.lower() for ig in ings):
-                    sb_results.append((name, ings))
+                cuisine = str(data.get("cuisine", "家常特色")).strip()
+                cuisine_group = str(
+                    data.get("cuisine_group") or infer_cuisine_group(cuisine)
+                ).strip()
+                difficulty = str(data.get("difficulty", "简单")).strip()
+                tags = [str(t).strip() for t in data.get("tags", []) if str(t).strip()]
+                if (
+                    q in name.lower()
+                    or any(q in ig.lower() for ig in ings)
+                    or q in cuisine.lower()
+                    or q in cuisine_group.lower()
+                    or q in difficulty.lower()
+                    or any(q in t.lower() for t in tags)
+                ):
+                    sb_results.append((name, cuisine_group, cuisine, difficulty, tags, ings))
             if sb_results:
-                for name, ings in sb_results:
+                for name, cuisine_group, cuisine, difficulty, tags, ings in sb_results:
                     st.markdown(f"📖 **{name}**")
+                    st.caption(f"分类：{cuisine_group} / {cuisine} · 难度：{difficulty}")
+                    if tags:
+                        st.caption(f"标签：{'、'.join(tags)}")
                     if ings:
                         st.caption(f"食材：{'、'.join(ings)}")
                 st.caption(f"找到 {len(sb_results)} 道菜谱")
