@@ -25,6 +25,12 @@ def enter_edit(name: str, recipe_data: dict):
     st.session_state.form_ingredients = "、".join(
         recipe_data.get("ingredients", [])
     )
+    st.session_state.form_all_ingredients = "、".join(
+        recipe_data.get("all_ingredients", recipe_data.get("ingredients", []))
+    )
+    st.session_state.form_tips = "\n".join(
+        strip_number_prefix(s) for s in recipe_data.get("tips", [])
+    )
     st.rerun()
 
 

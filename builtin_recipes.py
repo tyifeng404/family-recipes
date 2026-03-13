@@ -9,16 +9,32 @@ builtin_recipes.py —— 系统内置经典菜谱库
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
+
 from cuisine import (
     DEFAULT_DIFFICULTY,
     FOREIGN_CUISINE_OPTIONS,
 )
 
-BUILTIN_RECIPE_VERSION = "2026-03-13-foreign-v1"
+BUILTIN_RECIPE_VERSION = "2026-03-13-rich-v2"
+PHOTO_DIR = Path(__file__).resolve().parent / "assets" / "recipe_photos"
 
 
 def _number_points(points: list[str]) -> list[str]:
     return [f"{i}. {text}" for i, text in enumerate(points, 1)]
+
+
+def _dedup(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for item in items:
+        text = str(item).strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
 
 
 POINT_TEMPLATES: dict[str, list[str]] = {
@@ -153,7 +169,263 @@ POINT_TEMPLATES: dict[str, list[str]] = {
 }
 
 
+DETAIL_TEMPLATES: dict[str, list[str]] = {
+    "stir_fry": [
+        "将主要食材分别改刀，硬质食材切薄片、叶菜切段备用。",
+        "肉类或海鲜先做基础腌制，静置 10 分钟后沥干多余水分。",
+        "热锅热油先下耐炒食材，再下易熟食材，中大火连续翻炒。",
+        "根据成熟度分次调味，翻匀后观察锅内水分及时收干。",
+        "出锅前快速复炒 10 秒，保持食材脆嫩与香气。",
+    ],
+    "braise": [
+        "主料切块并做好预处理，表面尽量控干水分。",
+        "锅中少油将主料煸炒至微黄，激发香气和焦香层次。",
+        "加入液体至刚好没过食材，小火慢焖使其充分入味。",
+        "中途检查软烂度和汤汁浓度，必要时少量补水。",
+        "最后开中火收汁到挂勺状态，装盘即可。",
+    ],
+    "stew": [
+        "将主料和配料切成大小接近的块状，保证成熟时间一致。",
+        "肉类先焯水或煎封，蔬菜类食材单独备用。",
+        "加足量液体后先煮开，再转小火慢炖 30~60 分钟。",
+        "中途轻轻翻动并观察软烂度，避免糊底或过度破碎。",
+        "达到软烂浓郁后调整口感，盛出即可。",
+    ],
+    "steam": [
+        "主料洗净改刀后平铺摆盘，厚薄尽量一致。",
+        "蒸锅提前烧开，上汽后再放入食材开始计时。",
+        "按食材厚薄控制蒸制时长，期间尽量少开盖。",
+        "蒸熟后焖 1 分钟再开盖，避免温差导致口感变差。",
+        "取出后按经典方式完成收尾即可上桌。",
+    ],
+    "deep_fry": [
+        "主料控干水分并完成裹粉或挂糊处理。",
+        "油温升至约 160~170°C 分批下锅，避免骤降。",
+        "炸至定型后捞出沥油，必要时静置片刻。",
+        "将油温升至 180°C 复炸 10~30 秒提升酥脆度。",
+        "快速调味或淋汁后立即装盘。",
+    ],
+    "boil": [
+        "主料和配料分别切配，按耐煮程度分组。",
+        "水或汤底煮开后先下耐煮食材，再下易熟食材。",
+        "保持微沸状态，避免大滚导致口感变老。",
+        "按经典熟度标准捞出或连汤盛碗。",
+        "最后补充点缀配料即可食用。",
+    ],
+    "soup": [
+        "主料处理干净并改刀，汤底食材单独准备。",
+        "先将汤底煮开，再放入主料小火慢熬出鲜味。",
+        "根据食材特性分段加入配料，避免同熟度冲突。",
+        "全程保持小火，必要时撇去浮沫保持清爽。",
+        "出锅前补充易熟食材并调整口感后盛碗。",
+    ],
+    "porridge": [
+        "米提前浸泡并冲洗，主料切小丁备用。",
+        "米与水先煮至开花，再加入主料继续熬煮。",
+        "中小火保持轻微翻滚，间隔搅动防粘底。",
+        "粥体逐渐浓稠后再加入易熟配料。",
+        "达到顺滑稠度后即可出锅。",
+    ],
+    "fried_rice": [
+        "主料切丁，米饭提前打散避免结块。",
+        "先炒香鸡蛋或肉类，再加入配菜翻炒断生。",
+        "倒入米饭后持续翻散，确保受热均匀。",
+        "按经典口感补充调味并炒至粒粒分明。",
+        "起锅前大火快炒 10 秒提升锅气。",
+    ],
+    "noodle": [
+        "主料切配并并行准备浇头或汤底。",
+        "面条煮至 8~9 成熟后捞出控水。",
+        "将面条与浇头或汤底组合，确保比例平衡。",
+        "快速翻拌或回煮 30 秒使味道融合。",
+        "装碗后补充经典点缀即可。",
+    ],
+    "dumpling": [
+        "主料切碎后拌成馅料，控制含水量。",
+        "面皮包入适量馅料并压实封口。",
+        "水开后下锅，轻推防止粘连。",
+        "浮起后继续煮至馅心完全熟透。",
+        "捞出沥水后即可上桌。",
+    ],
+    "bun": [
+        "完成面团一发并准备好馅料。",
+        "面团排气分剂，擀成中间厚边缘薄。",
+        "包入馅料收口，摆入蒸屉进行二发。",
+        "水开上汽后蒸制到位，关火焖 2 分钟。",
+        "开盖取出即可食用。",
+    ],
+    "pancake": [
+        "将面团或面糊静置后分份处理。",
+        "平底锅预热后少油，放入饼坯整形。",
+        "中小火慢烙，适时翻面保证受热均匀。",
+        "烙至两面金黄并熟透后出锅。",
+        "切块后按经典吃法搭配即可。",
+    ],
+    "cold": [
+        "主料先汆熟或煮熟，随后快速降温。",
+        "按食材特性切片或切丝，保持大小一致。",
+        "与辅料充分拌匀后静置 5 分钟入味。",
+        "装盘时注意层次和摆放整洁。",
+        "食用前可再次轻拌确保味道均匀。",
+    ],
+    "roast": [
+        "主料完成预处理并擦干表面水分。",
+        "烤箱预热后放入主料，按厚度设置时间。",
+        "中途翻面或转向，确保上色均匀。",
+        "达到目标熟度后取出静置回汁。",
+        "切配装盘并搭配经典配菜。",
+    ],
+    "salad": [
+        "蔬菜类食材洗净控水，蛋白质食材提前处理。",
+        "先混合耐拌食材，再加入叶菜类食材。",
+        "按经典比例加入调味并轻柔翻拌。",
+        "检查口感平衡后立即装盘。",
+        "食用前可按需补充脆感配料。",
+    ],
+    "pasta": [
+        "锅中加水煮沸后下意面，煮至略有硬芯。",
+        "并行处理酱汁主料，炒至香气充分释放。",
+        "将意面与酱汁同锅拌煮 1 分钟融合风味。",
+        "根据浓稠度少量补加面汤调整口感。",
+        "装盘后撒上经典配料即可。",
+    ],
+    "pizza": [
+        "面饼擀平后静置回弹，准备好配料。",
+        "在面饼上按顺序铺底酱、主料和奶酪。",
+        "预热烤箱后高温烘烤至边缘上色。",
+        "观察饼底熟度，必要时延长 1~2 分钟。",
+        "出炉后稍冷却切块食用。",
+    ],
+    "risotto": [
+        "主料切丁并预热高汤保持温热。",
+        "将米与主料翻炒后分次加入高汤。",
+        "每次吸收后再补加，持续搅动释放淀粉。",
+        "煮至米芯微弹并呈奶油质地。",
+        "关火后静置 1 分钟再装盘。",
+    ],
+    "bake": [
+        "主料处理后均匀铺入烤盘。",
+        "按层次加入辅料并做好表面整理。",
+        "预热后入炉烘烤，中途观察上色情况。",
+        "达到熟度后取出静置，防止切分散开。",
+        "切块装盘并按经典方式搭配。",
+    ],
+    "sandwich": [
+        "主料先处理成熟并切成适口尺寸。",
+        "面包轻微加热，提升香气和支撑力。",
+        "按经典层次放置主料和蔬菜。",
+        "轻压定型后对切，保证断面整齐。",
+        "立即食用可获得最佳口感。",
+    ],
+    "roll": [
+        "主料提前处理成熟并充分控水。",
+        "将饼皮或米纸铺平，放入配料并整理形状。",
+        "按由内向外方式卷紧，保持结构稳定。",
+        "静置 1~2 分钟后切段装盘。",
+        "搭配经典蘸料即可食用。",
+    ],
+    "grill": [
+        "主料表面擦干并按厚度均匀处理。",
+        "烤盘或烤架预热后放入主料煎烤。",
+        "根据厚度翻面并控制中心熟度。",
+        "达到目标上色后离火静置回汁。",
+        "切配后搭配配菜上桌。",
+    ],
+    "dessert": [
+        "按比例准备原料并完成基础混合。",
+        "将混合物倒入模具并抹平表面。",
+        "根据配方烘烤或冷藏至定型。",
+        "取出后冷却到适宜切分温度。",
+        "完成装饰后即可食用。",
+    ],
+}
+
+
+FULL_INGREDIENT_BASE = {
+    "中餐": ["食用油", "盐", "生抽", "料酒", "姜", "蒜"],
+    "西餐": ["橄榄油", "盐", "黑胡椒"],
+    "日本菜": ["酱油", "味醂", "清酒", "盐"],
+    "朝鲜菜": ["韩式辣酱", "蒜", "芝麻油", "糖"],
+    "东南亚菜": ["鱼露", "青柠", "糖", "蒜"],
+    "其他地区": ["橄榄油", "盐", "黑胡椒", "蒜"],
+}
+
+
+TECHNIQUE_EXTRAS = {
+    "deep_fry": ["淀粉"],
+    "braise": ["冰糖"],
+    "stew": ["洋葱"],
+    "soup": ["清水"],
+    "pasta": ["帕玛森奶酪"],
+    "pizza": ["奶酪"],
+    "risotto": ["高汤"],
+    "dessert": ["糖"],
+}
+
+
+def _hash_name(name: str) -> str:
+    return hashlib.md5(name.encode("utf-8")).hexdigest()[:16]
+
+
+def _photo_relpath(name: str) -> str:
+    return f"assets/recipe_photos/{_hash_name(name)}.svg"
+
+
+def _create_photo_svg(name: str, cuisine_group: str, cuisine: str, relpath: str):
+    path = Path(__file__).resolve().parent / relpath
+    if path.exists():
+        return
+    subtitle = f"{cuisine_group} / {cuisine}"
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<defs>
+  <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#fff8e1"/>
+    <stop offset="100%" stop-color="#ffe0b2"/>
+  </linearGradient>
+</defs>
+<rect width="1200" height="760" fill="url(#g)"/>
+<rect x="60" y="60" width="1080" height="640" rx="28" fill="#ffffff" opacity="0.82"/>
+<text x="600" y="310" text-anchor="middle" fill="#4e342e" font-size="78" font-family="Noto Sans SC, PingFang SC, sans-serif">{name}</text>
+<text x="600" y="390" text-anchor="middle" fill="#6d4c41" font-size="36" font-family="Noto Sans SC, PingFang SC, sans-serif">{subtitle} · 经典做法配图</text>
+<text x="600" y="590" text-anchor="middle" fill="#8d6e63" font-size="28" font-family="Noto Sans SC, PingFang SC, sans-serif">可在 assets/recipe_photos 中替换为真实菜品照片</text>
+</svg>
+"""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(svg, encoding="utf-8")
+    except OSError:
+        # 兼容只读部署环境：无法写入时保留 photo 路径，页面会提示文件缺失。
+        return
+
+
+def _build_all_ingredients(
+    main_ingredients: list[str],
+    cuisine_group: str,
+    cuisine: str,
+    technique: str,
+) -> list[str]:
+    if cuisine_group == "中餐":
+        base = FULL_INGREDIENT_BASE["中餐"]
+    else:
+        base = FULL_INGREDIENT_BASE.get(cuisine, FULL_INGREDIENT_BASE["其他地区"])
+    extras = TECHNIQUE_EXTRAS.get(technique, [])
+    return _dedup(list(main_ingredients) + base + extras)
+
+
+def _build_detailed_steps(
+    name: str,
+    technique: str,
+    main_ingredients: list[str],
+) -> list[str]:
+    templates = DETAIL_TEMPLATES.get(technique, DETAIL_TEMPLATES["stir_fry"])
+    lead = "、".join(main_ingredients[:3]) if main_ingredients else "主料"
+    customized = [f"【{name}】{templates[0].replace('主料', lead, 1)}"]
+    customized.extend(templates[1:])
+    return _number_points(customized)
+
+
 def _build_entry(
+    name: str,
     ingredients: list[str],
     technique: str,
     cuisine_group: str,
@@ -161,10 +433,17 @@ def _build_entry(
     tags: list[str] | None = None,
     difficulty: str = DEFAULT_DIFFICULTY,
 ) -> dict:
-    steps = POINT_TEMPLATES.get(technique, POINT_TEMPLATES["stir_fry"])
+    tips = POINT_TEMPLATES.get(technique, POINT_TEMPLATES["stir_fry"])
+    detailed_steps = _build_detailed_steps(name, technique, ingredients)
+    all_ingredients = _build_all_ingredients(ingredients, cuisine_group, cuisine, technique)
+    photo = _photo_relpath(name)
+    _create_photo_svg(name, cuisine_group, cuisine, photo)
     return {
-        "steps": _number_points(steps),
+        "steps": detailed_steps,
+        "tips": _number_points(tips),
         "ingredients": ingredients,
+        "all_ingredients": all_ingredients,
+        "photo": photo,
         "cuisine_group": cuisine_group,
         "cuisine": cuisine,
         "tags": tags or [],
@@ -410,6 +689,7 @@ def build_builtin_recipes() -> dict[str, dict]:
 
     for name, ingredients, technique in CHINESE_CLASSICS:
         recipes[name] = _build_entry(
+            name=name,
             ingredients=ingredients,
             technique=technique,
             cuisine_group="中餐",
@@ -421,6 +701,7 @@ def build_builtin_recipes() -> dict[str, dict]:
     for cuisine in FOREIGN_CUISINE_OPTIONS:
         for name, ingredients, technique, tags, difficulty in FOREIGN_CLASSICS[cuisine]:
             recipes[name] = _build_entry(
+                name=name,
                 ingredients=ingredients,
                 technique=technique,
                 cuisine_group="外国菜",

@@ -188,6 +188,22 @@ def _ensure_recipe_meta(recipes_data: dict) -> tuple[dict, bool]:
     return recipes_data, changed
 
 
+def _normalize_list(value) -> list[str]:
+    if isinstance(value, list):
+        items = value
+    elif isinstance(value, str):
+        items = [v.strip() for v in value.replace("，", ",").replace("、", ",").split(",")]
+    else:
+        items = []
+
+    out: list[str] = []
+    for item in items:
+        text = _as_clean_str(item)
+        if text:
+            out.append(text)
+    return out
+
+
 def _normalize_recipe_payload(recipe: dict) -> dict:
     data = dict(recipe)
 
@@ -197,9 +213,22 @@ def _normalize_recipe_payload(recipe: dict) -> dict:
     if cuisine_group == "家常特色":
         cuisine_group = infer_cuisine_group(cuisine)
 
+    main_ingredients = _normalize_list(data.get("ingredients"))
+    all_ingredients = _normalize_list(data.get("all_ingredients")) or list(main_ingredients)
+    steps = _normalize_list(data.get("steps"))
+    tips = _normalize_list(data.get("tips"))
+    if not tips and steps:
+        tips = steps[: min(5, max(3, len(steps)))]
+
     tags = normalize_tags(data.get("tags") if isinstance(data.get("tags"), list) else [])
     difficulty = normalize_difficulty(data.get("difficulty"))
+    photo = _as_clean_str(data.get("photo"))
 
+    data["ingredients"] = main_ingredients
+    data["all_ingredients"] = all_ingredients
+    data["steps"] = steps
+    data["tips"] = tips
+    data["photo"] = photo
     data["cuisine"] = cuisine
     data["cuisine_group"] = cuisine_group
     data["tags"] = tags

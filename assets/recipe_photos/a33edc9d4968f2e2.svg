@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<defs>
+  <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#fff8e1"/>
+    <stop offset="100%" stop-color="#ffe0b2"/>
+  </linearGradient>
+</defs>
+<rect width="1200" height="760" fill="url(#g)"/>
+<rect x="60" y="60" width="1080" height="640" rx="28" fill="#ffffff" opacity="0.82"/>
+<text x="600" y="310" text-anchor="middle" fill="#4e342e" font-size="78" font-family="Noto Sans SC, PingFang SC, sans-serif">叻沙面</text>
+<text x="600" y="390" text-anchor="middle" fill="#6d4c41" font-size="36" font-family="Noto Sans SC, PingFang SC, sans-serif">外国菜 / 东南亚菜 · 经典做法配图</text>
+<text x="600" y="590" text-anchor="middle" fill="#8d6e63" font-size="28" font-family="Noto Sans SC, PingFang SC, sans-serif">可在 assets/recipe_photos 中替换为真实菜品照片</text>
+</svg>

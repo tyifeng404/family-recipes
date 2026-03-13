@@ -2,6 +2,7 @@
 web/tab_record.py —— Tab 2：做菜记录入口（新建 / 历史）
 """
 
+import hashlib
 import os
 
 import streamlit as st
@@ -77,6 +78,8 @@ def _render_history(
         i = index_map.get(id(rec), -1)
         if i == -1:
             continue
+        raw = str(rec.get("id") or f"idx-{i}")
+        anchor = f"record-{hashlib.md5(raw.encode('utf-8')).hexdigest()[:12]}"
         notes_count = sum(1 for s in rec["steps"] if s["note"])
         photos_count = len(rec.get("photos", []))
         label_parts = [f"[{rec['date']}] {rec['name']}"]
@@ -89,6 +92,7 @@ def _render_history(
             label_parts.append(f"（{'，'.join(detail)}）")
 
         with st.expander("".join(label_parts)):
+            st.markdown(f"<a id='{anchor}'></a>", unsafe_allow_html=True)
             owner = rec.get("owner", "admin")
             if owner != current_user:
                 st.caption(f"来源账号：{owner}")

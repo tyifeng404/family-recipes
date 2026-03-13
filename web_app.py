@@ -19,6 +19,7 @@ from web.tab_recipe import render_recipe_tab
 from web.tab_record import render_record_tab
 from web.tab_ingredients import render_ingredients_tab
 from web.tab_account import render_account_tab
+from web.account_dialog import render_account_dialog
 from web.daily_recommend import render_daily_recommendations
 
 # ───────── 页面配置 ─────────
@@ -64,9 +65,12 @@ _defaults = {
     "form_name": "",
     "form_steps": "",
     "form_ingredients": "",
+    "form_all_ingredients": "",
+    "form_tips": "",
     "save_msg": "",
     "editing_record_idx": -1,
     "creating_new_record": False,
+    "open_account_dialog": False,
 }
 for _k, _v in _defaults.items():
     if _k not in st.session_state:
@@ -113,6 +117,9 @@ render_sidebar(
     is_admin=is_admin_user,
 )
 
+if st.session_state.get("open_account_dialog", False):
+    render_account_dialog(user)
+
 # ───────── 每日推荐菜谱 ─────────
 
 render_daily_recommendations(visible_recipes, visible_ingredients)
@@ -126,7 +133,7 @@ tab_recipe, tab_record, tab_ingredients, tab_account = st.tabs(
 )
 
 with tab_recipe:
-    render_recipe_tab(recipes, visible_recipes, user, is_admin_user)
+    render_recipe_tab(recipes, visible_recipes, visible_records, user, is_admin_user)
 
 with tab_record:
     render_record_tab(

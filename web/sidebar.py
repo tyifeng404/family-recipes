@@ -20,9 +20,15 @@ def render_sidebar(
     with st.sidebar:
         st.markdown(f"**当前账号：** `{current_user}`")
         st.caption("角色：管理员" if is_admin else "角色：普通用户")
-        if st.button("退出登录", key="btn_logout", use_container_width=True):
-            logout()
-            st.rerun()
+        col_account, col_logout = st.columns(2)
+        with col_account:
+            if st.button("账号管理", key="btn_open_account_dialog", use_container_width=True):
+                st.session_state["open_account_dialog"] = True
+                st.rerun()
+        with col_logout:
+            if st.button("退出登录", key="btn_logout", use_container_width=True):
+                logout()
+                st.rerun()
         st.divider()
 
         # ── 菜谱搜索 ──
@@ -38,6 +44,7 @@ def render_sidebar(
             sb_results = []
             for name, data in recipes.items():
                 ings = data.get("ingredients", [])
+                all_ings = data.get("all_ingredients", [])
                 cuisine = str(data.get("cuisine", "家常特色")).strip()
                 cuisine_group = str(
                     data.get("cuisine_group") or infer_cuisine_group(cuisine)
@@ -47,6 +54,7 @@ def render_sidebar(
                 if (
                     q in name.lower()
                     or any(q in ig.lower() for ig in ings)
+                    or any(q in ig.lower() for ig in all_ings)
                     or q in cuisine.lower()
                     or q in cuisine_group.lower()
                     or q in difficulty.lower()

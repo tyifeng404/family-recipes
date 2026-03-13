@@ -1,19 +1,20 @@
-"""
-web/tab_recipe.py —— Tab 1：菜谱管理（按菜系分组 / 搜索 / 添加 / 修改）
-"""
+"""web/tab_recipe.py —— Tab 1：菜谱管理（分类折叠 / 搜索 / 添加 / 修改）"""
 
 from __future__ import annotations
+
+import hashlib
+import os
 
 import streamlit as st
 
 import storage
+from config import BASE_DIR
 from cuisine import (
     BASE_TAG_OPTIONS,
     CHINESE_CUISINE_OPTIONS,
     CUISINE_GROUP_OPTIONS,
     DEFAULT_CUISINE,
     DEFAULT_CUISINE_GROUP,
-    DEFAULT_DIFFICULTY,
     DIFFICULTY_OPTIONS,
     FOREIGN_CUISINE_OPTIONS,
     infer_cuisine_group,
@@ -22,21 +23,16 @@ from cuisine import (
     normalize_difficulty,
     normalize_tags,
 )
-from web.ui_helpers import (
-    enter_edit,
-    ingredient_tags_html,
-    parse_ingredients,
-    strip_number_prefix,
-)
+from web.ui_helpers import enter_edit, ingredient_tags_html, parse_ingredients, strip_number_prefix
 
 
 def render_recipe_tab(
     recipes: dict,
     visible_recipes: dict,
+    visible_records: list,
     current_user: str,
     is_admin_user: bool,
 ):
-    """渲染菜谱管理 Tab 的全部内容。"""
     col_q, col_group, col_cuisine = st.columns([3, 1.5, 1.5])
     with col_q:
         query = st.text_input(
@@ -60,9 +56,9 @@ def render_recipe_tab(
     filtered = _filter_recipes(visible_recipes, query, group_filter, cuisine_filter)
 
     if query or group_filter != "全部大类" or cuisine_filter != "全部细分类":
-        _show_search_results(filtered, query, current_user, is_admin_user)
+        _show_search_results(filtered, visible_records, query, current_user, is_admin_user)
     else:
-        _show_all_recipes_grouped(filtered, current_user, is_admin_user)
+        _show_all_recipes_grouped(filtered, visible_records, current_user, is_admin_user)
 
     if st.session_state.show_form:
         _show_recipe_form(recipes, current_user, is_admin_user)
@@ -108,13 +104,14 @@ def _filter_recipes(recipes: dict, query: str, group_filter: str, cuisine_filter
             continue
 
         if q:
-            ingredients = [str(x).lower() for x in data.get("ingredients", [])]
+            main_ingredients = [str(x).lower() for x in data.get("ingredients", [])]
+            all_ingredients = [str(x).lower() for x in data.get("all_ingredients", [])]
             text_parts = [
                 name.lower(),
                 cuisine_group.lower(),
                 cuisine.lower(),
                 difficulty.lower(),
-            ] + ingredients + [t.lower() for t in tags]
+            ] + main_ingredients + all_ingredients + [t.lower() for t in tags]
             if not any(q in part for part in text_parts):
                 continue
 
@@ -128,7 +125,7 @@ def _can_edit_recipe(data: dict, current_user: str, is_admin_user: bool) -> bool
     return is_admin_user or owner == current_user
 
 
-def _tags_text(tags: list[str]) -> str:
+def _format_tags(tags: list[str]) -> str:
     if not tags:
         return "（无）"
     return " ".join([f"`{t}`" for t in tags])
@@ -142,19 +139,52 @@ def _show_meta(data: dict, current_user: str):
     owner = data.get("owner", "admin")
 
     st.caption(f"分类：{group} / {cuisine} · 难度：{difficulty}")
-    st.markdown(f"**标签：** {_tags_text(tags)}")
+    st.markdown(f"**标签：** {_format_tags(tags)}")
     if owner != current_user:
         st.caption(f"来源账号：{owner}")
 
 
-def _show_search_results(recipes: dict, query: str, current_user: str, is_admin_user: bool):
+def _anchor_id(rec: dict, fallback_idx: int) -> str:
+    raw = str(rec.get("id") or f"idx-{fallback_idx}")
+    digest = hashlib.md5(raw.encode("utf-8")).hexdigest()[:12]
+    return f"record-{digest}"
+
+
+def _record_links_for_recipe(recipe_name: str, visible_records: list) -> list[tuple[str, str]]:
+    links: list[tuple[str, str]] = []
+    for idx, rec in enumerate(visible_records):
+        if rec.get("name") != recipe_name:
+            continue
+        title = f"{rec.get('date', '')} · {rec.get('name', recipe_name)}"
+        links.append((title, _anchor_id(rec, idx)))
+    links.sort(key=lambda x: x[0], reverse=True)
+    return links
+
+
+def _photo_source(photo: str) -> str | None:
+    p = str(photo or "").strip()
+    if not p:
+        return None
+    if p.startswith("http://") or p.startswith("https://"):
+        return p
+    full = os.path.join(BASE_DIR, p)
+    if os.path.isfile(full):
+        return full
+    return None
+
+
+def _show_search_results(
+    recipes: dict,
+    visible_records: list,
+    query: str,
+    current_user: str,
+    is_admin_user: bool,
+):
     if recipes:
         st.success(f"找到 {len(recipes)} 道匹配菜谱")
         for name, data in recipes.items():
             with st.container(border=True):
-                st.subheader(f"📖 {name}")
-                _show_meta(data, current_user)
-                _render_recipe_detail(name, data, current_user, is_admin_user)
+                _render_recipe_detail(name, data, visible_records, current_user, is_admin_user)
         return
 
     st.warning("当前筛选条件没有匹配的菜谱，可以在下方直接新增 👇")
@@ -163,10 +193,31 @@ def _show_search_results(recipes: dict, query: str, current_user: str, is_admin_
         st.session_state.form_name = query if query else ""
         st.session_state.form_steps = ""
         st.session_state.form_ingredients = ""
+        st.session_state.form_all_ingredients = ""
+        st.session_state.form_tips = ""
         st.rerun()
 
 
-def _show_all_recipes_grouped(recipes: dict, current_user: str, is_admin_user: bool):
+def _toggle_key(prefix: str, *parts: str) -> str:
+    raw = "|".join([prefix, *parts])
+    return f"{prefix}_{hashlib.md5(raw.encode('utf-8')).hexdigest()[:10]}"
+
+
+def _render_expand_toggle(label: str, state_key: str):
+    if state_key not in st.session_state:
+        st.session_state[state_key] = True
+
+    col_l, col_b = st.columns([8, 1])
+    with col_l:
+        st.markdown(label)
+    with col_b:
+        btn_text = "收起" if st.session_state[state_key] else "展开"
+        if st.button(btn_text, key=f"btn_{state_key}", use_container_width=True):
+            st.session_state[state_key] = not st.session_state[state_key]
+            st.rerun()
+
+
+def _show_all_recipes_grouped(recipes: dict, visible_records: list, current_user: str, is_admin_user: bool):
     if not recipes:
         st.info("还没有任何菜谱，快来添加第一道吧！")
         st.session_state.show_form = True
@@ -181,24 +232,68 @@ def _show_all_recipes_grouped(recipes: dict, current_user: str, is_admin_user: b
         groups.setdefault(group, {}).setdefault(cuisine, []).append((name, data))
 
     for group in sorted(groups.keys()):
-        st.markdown(f"### {group}")
+        g_state = _toggle_key("grp", group)
+        _render_expand_toggle(f"### {group}", g_state)
+        if not st.session_state[g_state]:
+            continue
+
         for cuisine in sorted(groups[group].keys()):
-            st.markdown(f"**{cuisine}**")
+            c_state = _toggle_key("cui", group, cuisine)
+            _render_expand_toggle(f"**{cuisine}**", c_state)
+            if not st.session_state[c_state]:
+                continue
+
             for name, data in groups[group][cuisine]:
                 with st.expander(f"📖 {name}"):
-                    _show_meta(data, current_user)
-                    _render_recipe_detail(name, data, current_user, is_admin_user)
+                    _render_recipe_detail(name, data, visible_records, current_user, is_admin_user)
 
 
-def _render_recipe_detail(name: str, data: dict, current_user: str, is_admin_user: bool):
-    ingredients = data.get("ingredients", [])
-    if ingredients:
-        st.markdown(
-            f"**主要食材：** {ingredient_tags_html(ingredients)}",
-            unsafe_allow_html=True,
-        )
+def _render_recipe_detail(
+    name: str,
+    data: dict,
+    visible_records: list,
+    current_user: str,
+    is_admin_user: bool,
+):
+    # 排列顺序：名称、主要食材、全部食材、详细菜谱、要点、照片、做菜记录链接
+    st.markdown(f"**名称：{name}**")
+    _show_meta(data, current_user)
+
+    main_ingredients = data.get("ingredients", [])
+    all_ingredients = data.get("all_ingredients", []) or main_ingredients
+
+    st.markdown(
+        f"**主要食材：** {ingredient_tags_html(main_ingredients) if main_ingredients else '（未填写）'}",
+        unsafe_allow_html=True,
+    )
+    st.markdown(f"**全部食材：** {'、'.join(all_ingredients) if all_ingredients else '（未填写）'}")
+
+    st.markdown("**详细菜谱：**")
     for step in data.get("steps", []):
         st.markdown(f"&emsp;{step}")
+
+    st.markdown("**要点：**")
+    tips = data.get("tips", [])
+    if tips:
+        for tip in tips:
+            st.markdown(f"&emsp;{tip}")
+    else:
+        st.caption("（未填写）")
+
+    st.markdown("**照片：**")
+    photo_src = _photo_source(data.get("photo", ""))
+    if photo_src:
+        st.image(photo_src, use_container_width=True)
+    else:
+        st.caption("（未导入照片）")
+
+    links = _record_links_for_recipe(name, visible_records)
+    with st.expander(f"🔗 这道菜已保存做菜记录的链接（{len(links)}）", expanded=False):
+        if not links:
+            st.caption("暂无做菜记录")
+        else:
+            for title, anchor in links:
+                st.markdown(f"- [{title}](#{anchor})")
 
     if _can_edit_recipe(data, current_user, is_admin_user):
         if st.button(f"✏️ 修改「{name}」", key=f"edit_{name}"):
@@ -257,6 +352,11 @@ def _build_final_tags(
                 tags.append(t)
 
     return normalize_tags(tags)
+
+
+def _lines_to_numbered(text: str) -> list[str]:
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    return [f"{i}. {strip_number_prefix(line)}" for i, line in enumerate(lines, 1)]
 
 
 def _show_recipe_form(recipes: dict, current_user: str, is_admin_user: bool):
@@ -319,7 +419,6 @@ def _show_recipe_form(recipes: dict, current_user: str, is_admin_user: bool):
         key="inp_difficulty",
     )
 
-    # 标签
     default_spice = "未设置"
     if "辣" in old_tags:
         default_spice = "辣"
@@ -361,12 +460,35 @@ def _show_recipe_form(recipes: dict, current_user: str, is_admin_user: bool):
         placeholder="例如：番茄、鸡蛋",
     )
 
+    all_ingredients_input = st.text_area(
+        "全部食材（展示用，逗号/顿号分隔）",
+        value=st.session_state.form_all_ingredients,
+        key="inp_all_ingredients",
+        height=80,
+        placeholder="例如：番茄、鸡蛋、食用油、盐、葱",
+    )
+
     steps_input = st.text_area(
-        "制作要点（每行写一条，建议 3~5 条）",
+        "详细菜谱（每行一步）",
         value=st.session_state.form_steps,
-        height=240,
+        height=220,
         key="inp_steps",
-        placeholder="例如：\n食材切配大小一致\n先炒主料再合炒\n出锅前尝味调整",
+        placeholder="例如：\n主料改刀\n热锅处理\n分次调味\n收汁出锅",
+    )
+
+    tips_input = st.text_area(
+        "要点（每行一条，建议 3~5 条）",
+        value=st.session_state.form_tips,
+        height=140,
+        key="inp_tips",
+        placeholder="例如：\n火候控制\n先后顺序\n收汁时机",
+    )
+
+    photo_input = st.text_input(
+        "照片路径或URL（可选）",
+        value=str(old_data.get("photo", "")) if is_editing else "",
+        key="inp_photo",
+        placeholder="例如：assets/recipe_photos/xxxx.svg",
     )
 
     col_save, col_cancel, _ = st.columns([1, 1, 4])
@@ -377,46 +499,57 @@ def _show_recipe_form(recipes: dict, current_user: str, is_admin_user: bool):
 
     if save_clicked:
         final_name = name_input.strip()
-        final_text = steps_input.strip()
-        if not final_name or not final_text:
-            st.error("请填写菜名和至少一条制作要点！")
-        else:
-            lines = [line.strip() for line in final_text.split("\n") if line.strip()]
-            if len(lines) < 3 or len(lines) > 5:
-                st.error("制作要点请控制在 3~5 条。")
-                return
+        if not final_name:
+            st.error("请填写菜名！")
+            return
 
-            numbered = [f"{i}. {strip_number_prefix(line)}" for i, line in enumerate(lines, 1)]
-            parsed_ings = parse_ingredients(ingredients_input)
-            final_group, final_cuisine = _resolve_cuisine(group_selected, cuisine_selected, custom_cuisine)
-            final_tags = _build_final_tags(
-                spice_choice=spice_choice,
-                child_friendly=child_friendly,
-                selected_extra_tags=selected_extra_tags,
-                custom_tags_text=custom_tags_text,
-            )
+        detailed_steps = _lines_to_numbered(steps_input)
+        if len(detailed_steps) < 3:
+            st.error("详细菜谱至少需要 3 步。")
+            return
 
-            if is_editing and final_name != st.session_state.form_name:
-                recipes.pop(st.session_state.form_name, None)
+        tips = _lines_to_numbered(tips_input) if tips_input.strip() else detailed_steps[: min(5, len(detailed_steps))]
+        if len(tips) < 3 or len(tips) > 5:
+            st.error("要点请控制在 3~5 条。")
+            return
 
-            owner = old_owner if is_editing else current_user
-            recipes[final_name] = {
-                "steps": numbered,
-                "ingredients": parsed_ings,
-                "cuisine_group": final_group,
-                "cuisine": final_cuisine,
-                "tags": final_tags,
-                "difficulty": difficulty_selected,
-                "owner": owner,
-                "is_builtin": False,
-                "builtin_version": "",
-            }
+        parsed_main_ingredients = parse_ingredients(ingredients_input)
+        parsed_all_ingredients = parse_ingredients(all_ingredients_input) if all_ingredients_input.strip() else list(parsed_main_ingredients)
+        final_group, final_cuisine = _resolve_cuisine(group_selected, cuisine_selected, custom_cuisine)
+        final_tags = _build_final_tags(
+            spice_choice=spice_choice,
+            child_friendly=child_friendly,
+            selected_extra_tags=selected_extra_tags,
+            custom_tags_text=custom_tags_text,
+        )
 
-            storage.save_recipes(recipes)
-            storage.recipes = recipes
-            _reset_form()
-            st.session_state.save_msg = f"「{final_name}」已保存成功！"
-            st.rerun()
+        if is_editing and final_name != st.session_state.form_name:
+            recipes.pop(st.session_state.form_name, None)
+
+        owner = old_owner if is_editing else current_user
+        old_is_builtin = bool(old_data.get("is_builtin", False))
+        final_photo = photo_input.strip() or old_data.get("photo", "")
+
+        recipes[final_name] = {
+            "steps": detailed_steps,
+            "tips": tips,
+            "ingredients": parsed_main_ingredients,
+            "all_ingredients": parsed_all_ingredients,
+            "photo": final_photo,
+            "cuisine_group": final_group,
+            "cuisine": final_cuisine,
+            "tags": final_tags,
+            "difficulty": difficulty_selected,
+            "owner": owner,
+            "is_builtin": old_is_builtin if is_editing else False,
+            "builtin_version": old_data.get("builtin_version", "") if is_editing else "",
+        }
+
+        storage.save_recipes(recipes)
+        storage.recipes = recipes
+        _reset_form()
+        st.session_state.save_msg = f"「{final_name}」已保存成功！"
+        st.rerun()
 
     if cancel_clicked:
         _reset_form()
@@ -428,6 +561,8 @@ def _reset_form():
     st.session_state.form_name = ""
     st.session_state.form_steps = ""
     st.session_state.form_ingredients = ""
+    st.session_state.form_all_ingredients = ""
+    st.session_state.form_tips = ""
     for key in [
         "inp_name",
         "inp_cuisine_group",
@@ -439,7 +574,10 @@ def _reset_form():
         "inp_extra_tags",
         "inp_custom_tags",
         "inp_ingredients",
+        "inp_all_ingredients",
         "inp_steps",
+        "inp_tips",
+        "inp_photo",
     ]:
         if key in st.session_state:
             del st.session_state[key]
