@@ -19,6 +19,43 @@ _TAG_NEED = (
 )
 
 
+@st.dialog("📖 完整菜谱")
+def _render_recipe_dialog(recipe_name: str, recipe_data: dict):
+    st.markdown(f"### {recipe_name}")
+
+    cuisine_group = str(recipe_data.get("cuisine_group", "家常特色")).strip()
+    cuisine = str(recipe_data.get("cuisine", "家常特色")).strip()
+    difficulty = str(recipe_data.get("difficulty", "简单")).strip()
+    tags = [str(t).strip() for t in recipe_data.get("tags", []) if str(t).strip()]
+    st.caption(f"分类：{cuisine_group} / {cuisine} · 难度：{difficulty}")
+    st.caption(f"标签：{'、'.join(tags) if tags else '（无）'}")
+
+    main_ingredients = [str(x).strip() for x in recipe_data.get("ingredients", []) if str(x).strip()]
+    all_ingredients = [str(x).strip() for x in recipe_data.get("all_ingredients", []) if str(x).strip()]
+    if not all_ingredients:
+        all_ingredients = list(main_ingredients)
+
+    st.markdown(f"**主要食材：** {'、'.join(main_ingredients) if main_ingredients else '（未填写）'}")
+    st.markdown(f"**全部食材：** {'、'.join(all_ingredients) if all_ingredients else '（未填写）'}")
+
+    st.markdown("**详细菜谱：**")
+    for step in recipe_data.get("steps", []):
+        st.markdown(f"&emsp;{step}")
+
+    st.markdown("**要点：**")
+    tips = recipe_data.get("tips", [])
+    if tips:
+        for tip in tips:
+            st.markdown(f"&emsp;{tip}")
+    else:
+        st.caption("（未填写）")
+
+    if st.button("关闭", key="daily_recipe_dialog_close", use_container_width=True):
+        st.session_state["daily_dialog_open"] = False
+        st.session_state["daily_dialog_recipe_name"] = ""
+        st.rerun()
+
+
 def render_daily_recommendations(recipes: dict, ingredients_data: list):
     """在首页展示每日推荐菜谱（与已保存菜谱平级）。"""
     if not recipes:
@@ -26,6 +63,10 @@ def render_daily_recommendations(recipes: dict, ingredients_data: list):
 
     if "daily_recommend_refresh_nonce" not in st.session_state:
         st.session_state["daily_recommend_refresh_nonce"] = 0
+    if "daily_dialog_open" not in st.session_state:
+        st.session_state["daily_dialog_open"] = False
+    if "daily_dialog_recipe_name" not in st.session_state:
+        st.session_state["daily_dialog_recipe_name"] = ""
 
     avail_names = (
         {ing["name"] for ing in ingredients_data} if ingredients_data else set()
@@ -59,7 +100,14 @@ def render_daily_recommendations(recipes: dict, ingredients_data: list):
     for col, rec in zip(cols, recommendations):
         with col:
             with st.container(border=True):
-                st.markdown(f"#### {rec['name']}")
+                if st.button(
+                    rec["name"],
+                    key=f"btn_daily_recipe_{rec['name']}",
+                    use_container_width=True,
+                ):
+                    st.session_state["daily_dialog_recipe_name"] = rec["name"]
+                    st.session_state["daily_dialog_open"] = True
+                    st.rerun()
 
                 r_ings = rec["data"].get("ingredients", [])
                 if r_ings:
@@ -80,6 +128,15 @@ def render_daily_recommendations(recipes: dict, ingredients_data: list):
                 with st.expander("查看做法"):
                     for step in rec["data"]["steps"]:
                         st.markdown(f"&emsp;{step}")
+
+    if st.session_state.get("daily_dialog_open", False):
+        dialog_name = st.session_state.get("daily_dialog_recipe_name", "")
+        dialog_data = recipes.get(dialog_name)
+        if dialog_name and isinstance(dialog_data, dict):
+            _render_recipe_dialog(dialog_name, dialog_data)
+        else:
+            st.session_state["daily_dialog_open"] = False
+            st.session_state["daily_dialog_recipe_name"] = ""
 
     st.caption("点击“刷新推荐”可重新推荐 3 道菜谱。")
     st.divider()
