@@ -60,26 +60,32 @@ def _read_setting(name: str, default: str = "") -> str:
 
     section_names = ["supabase", "storage", "app"]
     for section_name in section_names:
-        section_value = _get_from_mapping(secrets, [section_name, section_name.upper()])
-        if not section_value:
-            # section 不是字符串时再尝试按映射读取
-            try:
+        section = None
+        try:
+            if section_name in secrets:
                 section = secrets[section_name]
+        except Exception:
+            pass
+        if section is None:
+            try:
+                upper_key = section_name.upper()
+                if upper_key in secrets:
+                    section = secrets[upper_key]
             except Exception:
-                continue
-            if isinstance(section, str):
-                continue
+                section = None
+        if section is None or isinstance(section, str):
+            continue
 
-            short_name = name.lower()
-            if name.startswith("SUPABASE_"):
-                short_name = name[len("SUPABASE_") :].lower()
-            if name == "STORAGE_BACKEND":
-                section_keys = [name, name.lower(), "backend", "storage_backend"]
-            else:
-                section_keys = [name, name.lower(), short_name]
-            nested_value = _get_from_mapping(section, section_keys)
-            if nested_value:
-                return nested_value
+        short_name = name.lower()
+        if name.startswith("SUPABASE_"):
+            short_name = name[len("SUPABASE_") :].lower()
+        if name == "STORAGE_BACKEND":
+            section_keys = [name, name.lower(), "backend", "storage_backend"]
+        else:
+            section_keys = [name, name.lower(), short_name]
+        nested_value = _get_from_mapping(section, section_keys)
+        if nested_value:
+            return nested_value
 
     return default
 
@@ -91,7 +97,7 @@ def _build_backend():
         _backend_diagnostic = "当前使用本地存储（STORAGE_BACKEND != supabase）"
         return LocalJsonBackend()
 
-    url = _read_setting("SUPABASE_URL", "")
+    url = _read_setting("SUPABASE_URL", "").rstrip("/")
     key = (
         _read_setting("SUPABASE_SERVICE_ROLE_KEY", "")
         or _read_setting("SUPABASE_ANON_KEY", "")
@@ -118,6 +124,27 @@ def _build_backend():
 _backend = _build_backend()
 
 
+def _switch_to_local_backend(reason: str):
+    global _backend, _backend_diagnostic
+    if getattr(_backend, "name", "") == "local":
+        return
+    _backend = LocalJsonBackend()
+    _backend_diagnostic = f"{reason}，已自动回退 local"
+    print(f"[storage] {reason}，已自动回退本地 JSON 后端。")
+
+
+def _call_backend(method_name: str, *args):
+    method = getattr(_backend, method_name)
+    try:
+        return method(*args)
+    except Exception as exc:
+        if getattr(_backend, "name", "") == "supabase":
+            reason = f"Supabase 调用失败（{exc.__class__.__name__}: {exc}）"
+            _switch_to_local_backend(reason)
+            return getattr(_backend, method_name)(*args)
+        raise
+
+
 def backend_name() -> str:
     """返回当前启用的后端名称（local / supabase）。"""
     return getattr(_backend, "name", "unknown")
@@ -129,27 +156,27 @@ def backend_diagnostic() -> str:
 
 
 def load_recipes():
-    return _backend.load_recipes()
+    return _call_backend("load_recipes")
 
 
 def save_recipes(recipes):
-    _backend.save_recipes(recipes)
+    _call_backend("save_recipes", recipes)
 
 
 def load_records():
-    return _backend.load_records()
+    return _call_backend("load_records")
 
 
 def save_records(records):
-    _backend.save_records(records)
+    _call_backend("save_records", records)
 
 
 def load_ingredients():
-    return _backend.load_ingredients()
+    return _call_backend("load_ingredients")
 
 
 def save_ingredients(ingredients):
-    _backend.save_ingredients(ingredients)
+    _call_backend("save_ingredients", ingredients)
 
 
 # -------------------- 模块级数据加载 --------------------

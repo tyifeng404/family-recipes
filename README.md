@@ -145,6 +145,18 @@ SUPABASE_SERVICE_ROLE_KEY="<your-service-role-key>"
 SUPABASE_STATE_TABLE="app_state"
 ```
 
+也支持分组写法：
+
+```toml
+[supabase]
+url="https://<project-ref>.supabase.co"
+service_role_key="<your-service-role-key>"
+state_table="app_state"
+
+[storage]
+backend="supabase"
+```
+
 保存后 Reboot 应用，进入页面后在左侧底部确认显示：
 
 - `存储后端：supabase`
@@ -158,6 +170,17 @@ SUPABASE_STATE_TABLE="app_state"
 5. 任一账号修改该记录备注，另一账号刷新确认变更可见。
 
 如果左下角显示 `存储后端：local`，说明云端 Secrets 未生效或键名有误。
+
+### 常见问题（ConnectError）
+
+如果出现 `httpx.ConnectError`，优先检查：
+
+1. `SUPABASE_URL` 必须是 API 域名：`https://<project-ref>.supabase.co`
+2. 不要填 Dashboard 链接（如 `https://supabase.com/dashboard/...`）
+3. `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_ANON_KEY` 是否完整复制
+4. Supabase 项目是否处于暂停状态（Free 计划长时间不用会暂停）
+
+当前代码在 Supabase 不可达时会自动回退到 `local`，并在侧边栏显示诊断信息。
 
 ## 快速演示流程（3 分钟上手）
 
